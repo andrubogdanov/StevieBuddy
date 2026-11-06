@@ -4,6 +4,7 @@
 Скрипт `buddy.lua` при первом запуске скачивает их в `workspace/StevieBuddy/` экзекутора.
 
 ```
+stevie_tool.rbxm           — предмет Buddy_Stevie: риг, лица и кадры анимаций (AnimSaves)
 stevie.rbxm                — модель Стиви (лица в папке Faces)
 stevie_icon.png
 sounds/

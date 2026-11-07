@@ -71,6 +71,7 @@ local CONFIG = {
     -- INWARD — к центру лица, ELBOW — согнуть локоть
     CANE_EAT_ARM = { RAISE = 55, INWARD = 30, ELBOW = 60 },
     CANE_SOUND_VOLUME = 0.6,
+    CANE_MUTE_GAME = true,   -- глушить игровые звуки ключа (осмотр, замок), пока играет своя анимация
     ASSETS_URL = "https://raw.githubusercontent.com/andrubogdanov/StevieBuddy/main/", -- откуда докачать картинку и звуки
     SCAN = true,             -- сохранить скан текстур комнат
     NOTIFY = true,
@@ -1714,10 +1715,114 @@ CANE_ANIMS.eat.tick = function(st, prev, t)
 end
 
 local caneAct = nil -- что играет сейчас
+
+-- Игровые звуки ключа во время своих анимаций: глушим то, что игра запустила вместе с
+-- анимацией (звук осмотра, щелчки замка), громкость возвращаем, когда звук доиграет.
+-- Что заглушили — пишем в workspace/StevieBuddy/cane_sounds_scan.txt
+local SOUND_KEEP = { running = true, jumping = true, landing = true, freefalling = true, climbing = true,
+    swimming = true, splash = true, gettingup = true, died = true }
+local mutedSounds = {} -- [Sound] = громкость
+local soundLog = {}
+local function muteSound(s, why)
+    if mutedSounds[s] or s.Name:find("^NewYearCane_") or s.Name:find("^TreatBuddy_") then return end
+    local n = s.Name:lower()
+    if SOUND_KEEP[n] or n:find("foot") or n:find("step") then return end
+    mutedSounds[s] = s.Volume
+    s.Volume = 0
+    table.insert(soundLog, ("%s id=%s (%s)"):format(s:GetFullName(), s.SoundId, why))
+    task.spawn(function()
+        local t0 = os.clock()
+        repeat task.wait(0.1) until not s.Parent or os.clock() - t0 > 8 or not (s.IsPlaying or caneAct)
+        if mutedSounds[s] then
+            pcall(function() s.Volume = mutedSounds[s] end)
+            mutedSounds[s] = nil
+        end
+    end)
+end
+
+-- следить за звуками внутри rootInst до момента untilT; filter(s) — какие можно глушить
+local function watchSounds(st, rootInst, untilT, filter, already)
+    if not rootInst then return end
+    local function ok(s)
+        return caneAct == st and os.clock() <= untilT and (not filter or filter(s))
+    end
+    local function hook(s)
+        if already and s.IsPlaying and not s.Looped and ok(s) then muteSound(s, st.name .. ", уже играл") end
+        table.insert(st.soundConns, s.Played:Connect(function()
+            if ok(s) then muteSound(s, st.name) end
+        end))
+    end
+    for _, d in ipairs(rootInst:GetDescendants()) do
+        if d:IsA("Sound") then hook(d) end
+    end
+    table.insert(st.soundConns, rootInst.DescendantAdded:Connect(function(d)
+        if not d:IsA("Sound") then return end
+        hook(d)
+        task.defer(function()
+            if d.Parent and d.IsPlaying and ok(d) then muteSound(d, st.name .. ", новый") end
+        end)
+    end))
+end
+
+local lastUnlock = nil -- { door, lock, time } — какой замок открыли
+local function nearestLock(char)
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    local rooms = workspace:FindFirstChild("CurrentRooms")
+    if not (rootPart and rooms) then return nil end
+    local best, bestD = nil, 12
+    for _, room in ipairs(rooms:GetChildren()) do
+        local door = room:FindFirstChild("Door")
+        local lock = door and door:FindFirstChild("Lock")
+        if lock and lock:IsA("BasePart") then
+            local d = (lock.Position - rootPart.Position).Magnitude
+            if d < bestD then best, bestD = lock, d end
+        end
+    end
+    return best
+end
+
+local function muteGameSounds(st)
+    if not CONFIG.CANE_MUTE_GAME then return end
+    st.soundConns = {}
+    local now = os.clock()
+    local untilEnd = now + st.anim.length
+    -- сам ключ и персонаж — всё время анимации
+    watchSounds(st, st.tool, untilEnd, nil, true)
+    watchSounds(st, st.char, untilEnd, nil, true)
+    -- общие места (звуки интерфейса и 2D-звуки) — только в первые мгновения, когда игра
+    -- запускает звук вместе с анимацией (чтобы не заглушить чужое, например монстров)
+    local early = now + 0.4
+    local function notLooped(s) return not s.Looped end
+    watchSounds(st, workspace.CurrentCamera, early, notLooped)
+    watchSounds(st, game:GetService("SoundService"), early, notLooped)
+    watchSounds(st, player:FindFirstChild("PlayerGui"), early, notLooped)
+    if st.name == "eat" then
+        -- замок двери: щелчки ключа и замка; звук открытия самой двери оставляем
+        local lock = lastUnlock and now - lastUnlock.time < 3 and lastUnlock.lock or nearestLock(st.char)
+        if lock then
+            watchSounds(st, lock, untilEnd, nil, true)
+            local door = lock.Parent
+            if door then
+                watchSounds(st, door, untilEnd, function(s)
+                    return s.Name == "Unlock" or s:IsDescendantOf(lock)
+                end, true)
+            end
+        end
+    end
+end
+
 local function finishCane()
     local st = caneAct
     if not st then return end
     caneAct = nil
+    for _, c in ipairs(st.soundConns or {}) do c:Disconnect() end
+    if #soundLog > 0 then
+        local text = "Заглушённые игровые звуки во время анимаций трости:\n" .. table.concat(soundLog, "\n")
+        pcall(function()
+            if makefolder and not (isfolder and isfolder("StevieBuddy")) then makefolder("StevieBuddy") end
+            writefile("StevieBuddy/cane_sounds_scan.txt", text)
+        end)
+    end
     for _, j in pairs(st.arm) do releaseJoint(j) end
     if st.grip then releaseJoint(st.grip) end
     if st.snack then st.snack:Destroy() end
@@ -1754,6 +1859,7 @@ local function startCane(name, tool)
         st.needEquipped = true
     end
     caneAct = st
+    pcall(muteGameSounds, st)
 end
 
 connect(RunService.Stepped, function()
@@ -1878,6 +1984,8 @@ local okCaneAnim, errCaneAnim = pcall(function()
     -- открыл замок (на случай, если анимация use называется иначе)
     connect(ProximityPromptService.PromptTriggered, function(prompt, who)
         if who ~= player or prompt.Name ~= "UnlockPrompt" then return end
+        local lock = prompt.Parent
+        if lock and lock:IsA("BasePart") then lastUnlock = { lock = lock, time = os.clock() } end
         task.delay(0.15, function()
             local tool = heldCane()
             if tool then startEat(tool) end
@@ -1909,6 +2017,9 @@ end
 cleanupCane = function()
     caneAlive = false
     finishCane()
+    for s, vol in pairs(mutedSounds) do
+        pcall(function() s.Volume = vol end)
+    end
     for tool, info in pairs(caneTools) do
         if tool.Parent and caneIcon and tool.TextureId == caneIcon then
             pcall(function() tool.TextureId = info.icon end)

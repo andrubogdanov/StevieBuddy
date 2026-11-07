@@ -1,34 +1,54 @@
 # StevieBuddy
 
-Ассеты для клиентского визуального бадди Стиви в DOORS: иконка предмета и звуки.
-Скрипт `buddy.lua` при первом запуске скачивает их в `workspace/StevieBuddy/` экзекутора.
+Клиентские визуальные моды для DOORS: всё меняется **только у тебя на экране**, игру и других
+игроков не трогает. Скрипты при первом запуске сами скачивают нужные картинки, звуки и модели
+отсюда в `workspace/StevieBuddy/` экзекутора.
+
+## Как запустить
+
+1. Зайди в DOORS.
+2. Открой нужный скрипт из папки [`scripts/`](scripts), скопируй весь текст и выполни его в экзекуторе.
+3. Повторный запуск выключает прошлую копию скрипта (можно править настройки и перезапускать).
+
+| Скрипт | Что делает |
+|---|---|
+| `scripts/newyear.lua` | Новогодний DOORS: снег, мигающие гирлянды и венки на дверях, игрушки на ёлочках, подарки, новогодние обои, иней на окнах, шапки на монстрах (у Скрича — цилиндр). Ключ превращается в карамельную трость: своя картинка в инвентаре, ПКМ — покрутить / подбросить, открыл дверь — трость съедается с хрустом |
+| `scripts/treat_buddy.lua` | Свои анимации для бадди в плаще (скин LilTreat): ЛКМ — погладить / пощекотать / натянуть капюшон, ПКМ — схватить за капюшон |
+| `scripts/buddy.lua` | Бадди Стиви: свой предмет-компаньон с лицами и анимациями |
+
+`newyear.lua` можно запускать вместе с `treat_buddy.lua`. `treat_buddy.lua` и `buddy.lua` вместе не запускай —
+оба цепляются к бадди.
+
+Настройки — в начале каждого скрипта, в таблице `CONFIG` (что включить/выключить, размеры, громкость).
+
+Для разработки (запускать в новогодней версии DOORS):
+`scripts/festive_scan.lua` — найти праздничные модели, `scripts/festive_export.lua` — сохранить их в `festive/`.
+
+## Файлы
 
 ```
+scripts/                   — сами скрипты (см. выше)
 stevie_tool.rbxm           — предмет Buddy_Stevie: риг, лица и кадры анимаций (AnimSaves)
 stevie.rbxm                — модель Стиви (лица в папке Faces)
-stevie_icon.png
+stevie_icon.png            — иконка Стиви
 sounds/
-  stevie_equip.ogg         — экипировка
-  stevie_inspect1.ogg      — осмотр 1
-  stevie_inspect2.ogg      — осмотр 2
-  stevie_face_left.ogg     — левое лицо
-  stevie_face_right.ogg    — правое лицо
-  stevie_face_default.ogg  — лицо по умолчанию
-  treat_*.mp3              — звуки для treat_buddy.lua (бадди в плаще, скин LilTreat):
-                             pat1-3, coo, yip, squeak1-2, giggle, rustle, grab,
-                             struggle, boop, mmf, hmph
+  stevie_*.ogg             — звуки Стиви для buddy.lua (экипировка, осмотр, лица)
+  treat_*.mp3              — звуки для treat_buddy.lua: pat1-3, coo, yip, squeak1-2, giggle,
+                             rustle, grab, struggle, boop, mmf, hmph
+  cane_*.mp3               — звуки трости для newyear.lua: whoosh1-2 (крутить/подбросить),
+                             catch (поймал), crunch1-3 (откусил)
 textures/
   newyear_wallpaper.png    — новогодние обои для newyear.lua (бесшовная плитка 512x512)
+  candy_key_icon.png       — картинка трости для слота инвентаря (256x256)
+festive/
+  *.json                   — модели из новогодней версии DOORS (из чего собраны, размеры, цвета,
+                             меши, свет): игрушки на ёлки, лампочка гирлянды, подарок, венок,
+                             цилиндр Скрича и др. newyear.lua собирает по ним украшения в обычном DOORS
 ```
 
-`treat_buddy.lua` скачивает свои звуки `sounds/treat_*.mp3` отсюда же
-в `workspace/StevieBuddy/sounds/`.
-
-`newyear.lua` скачивает `textures/newyear_wallpaper.png` в `workspace/StevieBuddy/textures/`
-и ставит его вместо обоев в комнатах (только у тебя на экране).
-
-В `buddy.lua` укажи:
+Если делаешь свой форк — поменяй в скриптах ссылку на свой ник:
 
 ```lua
 ASSETS_URL = "https://raw.githubusercontent.com/<ник>/StevieBuddy/main/",
 ```
+(в `newyear.lua` ещё `WALLPAPER_URL` и `FESTIVE_URL`).

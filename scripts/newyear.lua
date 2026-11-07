@@ -6,7 +6,7 @@
       - уютный свет: лёгкое свечение огоньков и чуть праздничнее цвета
       - новогодняя шапочка на бадди
       - ключ превращается в карамельную трость (и на полу, и в руке), в инвентаре — картинка трости;
-        ПКМ — покрутить / подбросить (по очереди), открыл дверь — трость съедается с хрустом
+        ПКМ — покрутить и показать / подбросить (по очереди), открыл дверь — трость съедается с хрустом
       - подарки под ёлками, иней на окнах (снег на мебели пока выключен)
       - новогодние обои: красно-зелёные ромбы с золотом и снежинками
       - шапки Санты на монстрах (Rush, Ambush, Figure, Seek...), у Скрича — его родной цилиндр
@@ -64,7 +64,10 @@ local CONFIG = {
     CANE_ICON = true,        -- своя картинка трости в слоте инвентаря вместо ключа
     CANE_ICON_FILE = "StevieBuddy/textures/candy_key_icon.png",
     CANE_ANIMS = true,       -- ПКМ с тростью: покрутить / подбросить (по очереди)
-    CANE_RMB_ORDER = { "spin", "toss" },
+    CANE_RMB_ORDER = { "spin", "toss" }, -- spin — покрутить и показать (как в Rivals), toss — подбросить
+    -- рука при показе трости (градусы от игровой позы): RAISE — поднять, INWARD — к центру экрана,
+    -- ELBOW — согнуть локоть (предплечье вертикально)
+    CANE_SHOW_ARM = { RAISE = 30, INWARD = 25, ELBOW = 50 },
     CANE_TOSS_HEIGHT = 2.2,  -- как высоко подбрасывать (studs)
     CANE_EAT = true,         -- открыл дверь — съел трость (вместо того чтобы вставлять в замок)
     -- рука «ко рту» (градусы от позы с предметом): RAISE — поднять вперёд-вверх,
@@ -1178,6 +1181,7 @@ local function keyRig(d)
 end
 
 local onCaneTool -- трость в руке: иконка и анимации (задаётся ниже)
+local caneAxes = {} -- [деталь-ключ] = { up (к крючку), side (куда загибается крючок), L } в осях детали
 
 local function caneKey(key, holder, scope)
     if caneFor[key] or not key.Parent then return end
@@ -1201,6 +1205,7 @@ local function caneKey(key, holder, scope)
     local L = axes[1].len * CONFIG.CANDY_KEY_SCALE
 
     local cane = buildCane(key, frame, L)
+    caneAxes[key] = { up = up, side = side, L = L }
     caneFor[key] = cane
     cane.Parent = holder
     track(cane)
@@ -1598,19 +1603,55 @@ end
 
 local CANE_ANIMS = {}
 
--- покрутить: трость делает два оборота «пропеллером» перед тобой, рука чуть приподнята
+-- Поза Handle в мире -> Transform его сустава (абсолютно, игровую позу Handle перекрываем)
+local function gripTransformFor(g, H)
+    local p0 = jointPart0(g)
+    if not p0 then return nil end
+    return (p0.CFrame * jointC0(g)):Inverse() * H * jointC1(g)
+end
+-- где Handle был бы при игровой позе
+local function handleNatural(g, base)
+    local p0 = jointPart0(g)
+    return p0.CFrame * jointC0(g) * base * jointC1(g):Inverse()
+end
+
+-- покрутить (как осмотр в Rivals): рука поднимается к центру экрана, трость делает оборот
+-- по часовой и замирает крючком вверх (стержень свисает влево-вниз) — любуемся пару секунд,
+-- потом ещё оборот, и рука опускается обратно
+local SHOW_TILT = math.rad(28)
 CANE_ANIMS.spin = {
-    length = 1.05,
-    sounds = { { 0.12, "whoosh" }, { 0.5, "whoosh" } },
+    length = 3.8,
+    sounds = { { 0.18, "whoosh" }, { 3.02, "whoosh" } },
     pose = function(t, st)
-        local w = bump(t, 0.05, 1.0)
+        local A = CONFIG.CANE_SHOW_ARM
+        local up = K(t, { { 0, 0 }, { 0.35, 1, "out" }, { 3.25, 1 }, { 3.8, 0 } })
+        local sway = bump(t, 0.7, 3.1)
         local arm = {
-            RightUpperArm = D(0, 0, 0, K(t, { { 0, 0 }, { 0.15, 14 }, { 0.85, 14 }, { 1.05, 0 } }), 0, 0),
-            RightLowerArm = D(0, 0, 0, K(t, { { 0, 0 }, { 0.15, -10 }, { 0.85, -10 }, { 1.05, 0 } }), 0, 0),
-            -- кисть описывает маленький круг — крутит
-            RightHand = D(0, 0, 0, 9 * w * sin(t * TAU * 2), 0, 9 * w * math.cos(t * TAU * 2)),
+            RightUpperArm = D(0, 0, 0, A.RAISE * up + 2 * sway * sin(t * 2.2), A.INWARD * up, 0),
+            RightLowerArm = D(0, 0, 0, A.ELBOW * up, 0, 0),
+            RightHand = D(0, 0, 0, 0, 0, 3 * sway * sin(t * 1.7)),
         }
-        return arm, { angle = K(t, { { 0.06, 0 }, { 0.95, 2 * TAU } }), axis = st.look }
+        local s = K(t, { { 0.12, 0 }, { 0.72, 1, "out" }, { 3.0, 1 }, { 3.6, 0 } })
+        local spin = K(t, { { 0.12, 0 }, { 0.72, TAU, "out" } }) + K(t, { { 3.0, 0 }, { 3.6, TAU } })
+        return arm, { custom = function(g, base)
+            local info = st.info
+            local cam = workspace.CurrentCamera
+            local axes = info and info.axes
+            if not (cam and axes and jointPart0(g)) then return base end
+            local nat = handleNatural(g, base)
+            local cf = cam.CFrame
+            -- оси трости при показе: «вверх» (к крючку) — вверх-вправо, крючок загибается вправо
+            local U = cf.UpVector * math.cos(SHOW_TILT) + cf.RightVector * math.sin(SHOW_TILT)
+            local S = cf.RightVector * math.cos(SHOW_TILT) - cf.UpVector * math.sin(SHOW_TILT)
+            local disp = CFrame.fromMatrix(Vector3.zero, S, U)
+                * CFrame.fromMatrix(Vector3.zero, axes.side, axes.up):Inverse()
+            local rot = nat.Rotation:Lerp(disp, s)
+            local wobble = math.rad(4) * sway * sin(t * 2.6)
+            -- крючок над кулаком: сама трость чуть ниже
+            local pos = nat.Position - U * (axes.L * 0.22 * s)
+            local H = CFrame.new(pos) * CFrame.fromAxisAngle(cf.LookVector, spin + wobble) * rot
+            return gripTransformFor(g, H) or base
+        end }
     end,
 }
 
@@ -1846,7 +1887,7 @@ local function startCane(name, tool)
     local look = cam and cam.CFrame.LookVector or Vector3.new(0, 0, -1)
     local flat = Vector3.new(look.X, 0, look.Z)
     local st = {
-        name = name, anim = CANE_ANIMS[name], start = os.clock(), tool = tool, char = char,
+        name = name, anim = CANE_ANIMS[name], start = os.clock(), tool = tool, char = char, info = info,
         arm = findArm(char), lastT = -1, zero = {},
         look = look, right = cam and cam.CFrame.RightVector or Vector3.xAxis,
         fwd = flat.Magnitude > 1e-3 and flat.Unit or Vector3.zero,
@@ -1898,7 +1939,11 @@ connect(RunService.Stepped, function()
     local g = st.grip
     if grip and g and g.Parent then
         local base = readBase(g)
-        writeJoint(g, gripMove(g, base, grip.angle, grip.axis, grip.offset))
+        if grip.custom then
+            writeJoint(g, grip.custom(g, base))
+        else
+            writeJoint(g, gripMove(g, base, grip.angle, grip.axis, grip.offset))
+        end
     end
 end)
 
@@ -2005,7 +2050,7 @@ onCaneTool = function(tool, handle, cane)
         info = { icon = tool.TextureId }
         caneTools[tool] = info
     end
-    info.handle, info.cane = handle, cane
+    info.handle, info.cane, info.axes = handle, cane, caneAxes[handle]
     if CONFIG.CANE_ICON and caneIcon and tool.TextureId ~= caneIcon then tool.TextureId = caneIcon end
 end
 -- трости, которые появились раньше этого места (ключ уже был в руке при запуске)

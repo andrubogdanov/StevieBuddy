@@ -17,10 +17,15 @@ sounds/
   treat_*.mp3              — звуки для treat_buddy.lua (бадди в плаще, скин LilTreat):
                              pat1-3, coo, yip, squeak1-2, giggle, rustle, grab,
                              struggle, boop, mmf, hmph
+textures/
+  newyear_wallpaper.png    — новогодние обои для newyear.lua (бесшовная плитка 512x512)
 ```
 
 `treat_buddy.lua` скачивает свои звуки `sounds/treat_*.mp3` отсюда же
 в `workspace/StevieBuddy/sounds/`.
+
+`newyear.lua` скачивает `textures/newyear_wallpaper.png` в `workspace/StevieBuddy/textures/`
+и ставит его вместо обоев в комнатах (только у тебя на экране).
 
 В `buddy.lua` укажи:
 

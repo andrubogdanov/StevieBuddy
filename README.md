@@ -14,7 +14,13 @@ sounds/
   stevie_face_left.ogg     — левое лицо
   stevie_face_right.ogg    — правое лицо
   stevie_face_default.ogg  — лицо по умолчанию
+  treat_*.mp3              — звуки для treat_buddy.lua (бадди в плаще, скин LilTreat):
+                             pat1-3, coo, yip, squeak1-2, giggle, rustle, grab,
+                             struggle, boop, mmf, hmph
 ```
+
+`treat_buddy.lua` скачивает свои звуки `sounds/treat_*.mp3` отсюда же
+в `workspace/StevieBuddy/sounds/`.
 
 В `buddy.lua` укажи:
 
